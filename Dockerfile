@@ -9,12 +9,9 @@ FROM builder AS openrecipes
 
 RUN apt-get update && apt-get install -y \
     libqrencode-dev \
-    libqt53dquick5 \
-    libqt5quickcontrols2-5 \
     libqt5svg5-dev \
     libqt5webview5-dev \
     libsodium-dev \
-    libsodium23 \
     pkg-config \
     qt5-default \
     qt5-qmake \
@@ -28,8 +25,34 @@ WORKDIR /src/openrecipes
 
 RUN qmake
 RUN make
+RUN make install
 
+FROM debian:buster AS testrun
 
-FROM debian:buster
+RUN apt-get update && apt-get install -y \
+    libqrencode4 \
+    libqt5network5 \
+    libqt5quickcontrols2-5 \
+    libqt5sql5 \
+    libqt5xml5 \
+    libsodium23 \
+    && rm -rf /var/lib/apt/lists/*
 
-# TODO: Create runtime environment for openrecipe
+COPY --from=openrecipes \
+    /usr/bin/openrecipes \
+    /usr/bin/openrecipes
+
+COPY --from=openrecipes \
+    /usr/bin/openrecipesserver \
+    /usr/bin/openrecipesserver
+
+COPY --from=openrecipes \
+    /usr/share/applications/openrecipes.desktop \
+    /usr/share/applications/openrecipes.desktop
+
+COPY --from=openrecipes \
+    /usr/share/pixmaps/openrecipes.svg \
+    /usr/share/pixmaps/openrecipes.svg
+
+RUN /usr/bin/openrecipes --help ||:
+RUN /usr/bin/openrecipesserver --help ||:
