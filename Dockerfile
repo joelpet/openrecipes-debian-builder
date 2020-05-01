@@ -5,24 +5,6 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 
-FROM builder AS libsodium
-
-RUN apt-get update && apt-get install -y \
-    autogen \
-    libtool \
-    && rm -rf /var/lib/apt/lists/*
-
-ADD libsodium/releases/old/libsodium-1.0.16.tar.gz /src
-
-WORKDIR /src/libsodium-1.0.16
-
-RUN ./autogen.sh
-RUN ./configure
-RUN make
-RUN make check
-RUN make install
-
-
 FROM builder AS openrecipes
 
 RUN apt-get update && apt-get install -y \
@@ -39,8 +21,6 @@ RUN apt-get update && apt-get install -y \
     qtquickcontrols2-5-dev \
     qttools5-dev-tools \
     && rm -rf /var/lib/apt/lists/*
-
-COPY --from=libsodium /usr/local /usr/local
 
 ADD openrecipes /src/openrecipes
 
