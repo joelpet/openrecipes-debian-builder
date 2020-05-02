@@ -1,0 +1,5 @@
+openrecipes (0.2.2-1) unstable; urgency=medium
+
+  * Initial release (Closes: #nnnn)  <nnnn is the bug number of your ITP>
+
+ -- Firstname Lastname <your.email.address@example.org>  Sat, 02 May 2020 11:18:47 +0000
