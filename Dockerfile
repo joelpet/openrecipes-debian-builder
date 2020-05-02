@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y \
     qttools5-dev-tools \
     && rm -rf /var/lib/apt/lists/*
 
+ARG upstream_version
+ENV upstream_version=${upstream_version}
 ARG user_id
 ARG group_id
 ARG user_name=builder
@@ -24,24 +26,89 @@ RUN groupadd --system --gid ${group_id} ${group_name}  \
 
 USER ${user_name}
 
-WORKDIR ${home_dir}
-
-ARG upstream_version=0.2.2
+RUN mkdir -p ${home_dir}/workspace/pkg
+WORKDIR ${home_dir}/workspace/pkg
 
 ADD --chown=builder:builder \
     https://gitlab.com/ddorian/openrecipes/-/archive/v${upstream_version}/openrecipes-v${upstream_version}.tar.gz \
     .
 
-RUN mkdir openrecipes-${upstream_version}
+RUN mkdir -p openrecipes-${upstream_version}/debian
+VOLUME openrecipes-${upstream_version}/debian
+
+RUN tar \
+    --directory openrecipes-${upstream_version} \
+    --strip-components=1 \
+    --extract \
+    --file=openrecipes-v${upstream_version}.tar.gz
+
+
+# https://www.debian.org/doc/manuals/debmake-doc/ch05.en.html#workflow
+FROM builder AS debianizer
+
+ARG user_name=builder
+ARG group_name=builder
+ARG home_dir=/home/${user_name}
+
+USER root
+
+RUN apt-get update && apt-get install -y \
+    dh-make \
+    && rm -rf /var/lib/apt/lists/*
+
+USER ${user_name}
+
+ENV DEBEMAIL="your.email.address@example.org"
+ENV DEBFULLNAME="Firstname Lastname"
+
 WORKDIR openrecipes-${upstream_version}
 
-RUN mkdir debian
-VOLUME debian
+RUN dh_make \
+    --yes \
+    --single \
+    --copyright gpl3 \
+    --addmissing \
+    --file ../openrecipes-v${upstream_version}.tar.gz
+# --addmissing (reprocess package and add missing files):
+# https://www.debian.org/doc/manuals/maint-guide/first.en.html#ftn.idm874
+# https://wiki.debian.org/DebianMentorsFaq#What.27s_wrong_with_upstream_shipping_a_debian.2F_directory.3F
 
-RUN tar --strip-components=1 -xf ../openrecipes-v${upstream_version}.tar.gz
+ENTRYPOINT dh_make \
+    --yes \
+    --single \
+    --copyright gpl3 \
+    --addmissing \
+    --file ../openrecipes-v${upstream_version}.tar.gz
+
+
+FROM builder AS dpkg
+
+ARG user_name=builder
+ARG group_name=builder
+ARG home_dir=/home/${user_name}
+
+USER root
+
+RUN apt-get update && apt-get install -y \
+    debhelper \
+    && rm -rf /var/lib/apt/lists/*
+
+USER ${user_name}
+
+COPY --from=debianizer \
+    ${home_dir}/workspace/pkg/ \
+    .
+
+WORKDIR openrecipes-${upstream_version}
+
+VOLUME /out
+
+ENTRYPOINT bash -c "dpkg-buildpackage --unsigned-source --unsigned-changes && cp -r ../ /out"
 
 
 FROM builder AS testbuild
+
+WORKDIR pkg/openrecipes-${upstream_version}
 
 RUN qmake
 RUN make
@@ -80,24 +147,3 @@ COPY --from=testbuild \
 
 RUN /usr/bin/openrecipes --help ||:
 RUN /usr/bin/openrecipesserver --help ||:
-
-
-# https://www.debian.org/doc/manuals/debmake-doc/ch05.en.html#workflow
-FROM builder AS debianizer
-
-USER root
-
-RUN apt-get update && apt-get install -y \
-    dh-make \
-    && rm -rf /var/lib/apt/lists/*
-
-USER ${user_name}
-
-ENV DEBEMAIL="your.email.address@example.org"
-ENV DEBFULLNAME="Firstname Lastname"
-
-ENTRYPOINT dh_make --yes --single --copyright gpl3 --addmissing --file ../openrecipes-v0.2.2.tar.gz
-# --addmissing (reprocess package and add missing files):
-# https://www.debian.org/doc/manuals/maint-guide/first.en.html#ftn.idm874
-# https://wiki.debian.org/DebianMentorsFaq#What.27s_wrong_with_upstream_shipping_a_debian.2F_directory.3F
-
